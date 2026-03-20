@@ -137,11 +137,59 @@ def decode_outputs(outputs, conf_thresh=0.5, nms_thresh=0.5):
                         y2 = (y + w/2) / IMAGE_SIZE
 
                         all_boxes[b].append([x1, y1, x2, y2, score, cls_id])
+    #NMS
+    for b in range(batch):
+        all_boxes[b] = nms(all_boxes[b], nms_thresh)
 
     return all_boxes
 
+def nms(boxes, iou_thresh):
+    if len(boxes) == 0:
+        return []
+    keep = []
+    #按类别分组
+    unique_cls = np.unique(boxes[:, 5])
+    for cls in unique_cls:
+        cls_mask = boxes[:, 4] == cls
+        cls_boxes = boxes[cls_mask]
+        #排序
+        cls_boxes = sorted(cls_boxes, key=lambda x : x[4], reverse=True)
+        
+        idx = 0
+        while idx < len(cls_boxes):
+            best = cls_boxes[idx]
+            keep.append(best)
+            if idx == len(cls_boxes) -1:
+                break
+            ious = iou_vectorized(cls_boxes[idx:, :4], best)
+            iou_mask = ious <= iou_thresh
+            cls_boxes = cls_boxes[iou_mask]
+            idx = 0
+        
+    return np.array(keep)
+
+def iou_vectorized(box1, box2):
+    x1 = max(box1[:, 0], box2[0])
+    y1 = max(box1[:, 1], box2[1])
+    x2 = min(box1[:, 2], box2[2])
+    y2 = min(box1[:, 3], box2[3])
+
+    inter_area = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    area1 = (box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    union = area1 + area2 - inter_area + 10e-16
+    return inter_area / union
+
+def visualize(image, boxes, class_names):
+    """绘制检测结果，image为BGR格式的numpy数组"""
+    img = image.copy()
+    h, w, _ = image.shpe
+    for box in boxes:
+        x1, y1, x2, y2, score, cls_id = box
+        x1, y1, x2, y2 = int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h)
+        color = (0, 255, 0) if cls_id == 0 else (0, 0, 255)
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(img, f'{class_names[cls_id]}:{score:.2f}', (x1 - 5, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
 
-
-
-     
